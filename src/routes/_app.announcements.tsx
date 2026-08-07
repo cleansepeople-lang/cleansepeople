@@ -24,7 +24,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/_app/announcements")({
-  head: () => ({ meta: [{ title: "Announcements - CleanUp" }] }),
+  head: () => ({ meta: [{ title: "Announcements - Cleans" }] }),
   component: AnnouncementsPage,
 });
 

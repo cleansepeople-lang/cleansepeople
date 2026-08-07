@@ -39,18 +39,18 @@ function designation(row: SalaryReportRow) {
   return (row as SalaryReportRow & { designation?: string }).designation ?? "Employee";
 }
 
-function createDoc(title: string, subtitle: string, id: string) {
+async function createDoc(title: string, subtitle: string, id: string) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" }) as PdfDoc;
   const generated = new Date().toLocaleString("en-IN");
 
   doc.setProperties({
     title,
     subject: subtitle,
-    author: "Hivetree HRMS",
-    creator: "Hivetree HRMS",
+    author: "Cleans",
+    creator: "Cleans",
   });
 
-  drawHeader(doc, title, subtitle, id);
+  await drawHeader(doc, title, subtitle, id);
 
   return {
     doc,
@@ -59,23 +59,58 @@ function createDoc(title: string, subtitle: string, id: string) {
   };
 }
 
-function drawHeader(doc: jsPDF, title: string, subtitle: string, id: string) {
+async function drawHeader(doc: jsPDF, title: string, subtitle: string, id: string) {
   doc.setFillColor(...BLUE_DARK);
   doc.rect(0, 0, 210, 32, "F");
 
   doc.setFillColor(255, 255, 255);
   doc.roundedRect(14, 8, 17, 17, 3, 3, "F");
-  doc.setTextColor(...BLUE_DARK);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text("HT", 22.5, 19.5, { align: "center" });
+
+  try {
+    const img = new Image();
+    img.src = "/cleans-logo.png";
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const radius = img.width * (3 / 17);
+      ctx.beginPath();
+      ctx.moveTo(radius, 0);
+      ctx.lineTo(canvas.width - radius, 0);
+      ctx.quadraticCurveTo(canvas.width, 0, canvas.width, radius);
+      ctx.lineTo(canvas.width, canvas.height - radius);
+      ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height);
+      ctx.lineTo(radius, canvas.height);
+      ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius);
+      ctx.lineTo(0, radius);
+      ctx.quadraticCurveTo(0, 0, radius, 0);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      doc.addImage(canvas.toDataURL("image/png"), "PNG", 14, 8, 17, 17);
+    } else {
+      doc.addImage(img, "PNG", 14, 8, 17, 17);
+    }
+  } catch (e) {
+    doc.setTextColor(...BLUE_DARK);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("HT", 22.5, 19.5, { align: "center" });
+  }
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(16);
-  doc.text("Hivetree", 36, 14);
+  doc.setFont("helvetica", "bold");
+  doc.text("Cleans", 36, 14);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.text("Payroll and workforce management", 36, 20);
+  doc.text("DRY CLEANING & LAUNDRY SERVICES", 36, 20);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
@@ -180,7 +215,7 @@ function finalY(doc: PdfDoc, fallback: number) {
   return doc.lastAutoTable?.finalY ?? fallback;
 }
 
-export function downloadSalaryPdf(
+export async function downloadSalaryPdf(
   filename: string,
   row: SalaryReportRow,
   options?: { title?: string; startDate?: string; endDate?: string },
@@ -190,7 +225,7 @@ export function downloadSalaryPdf(
       ? `${options.startDate} to ${options.endDate}`
       : row.period;
   const id = reportId("PAY", `${row.empCode}${row.endDate}`);
-  const { doc, addFooter } = createDoc(
+  const { doc, addFooter } = await createDoc(
     options?.title ?? "Corporate Payroll Report",
     `Employee salary report | ${period}`,
     id,
@@ -260,7 +295,12 @@ export function downloadSalaryPdf(
       ["Overtime earnings", number(row.overtimeHours), money(overtimeRate), money(row.overtime)],
       ["Fixed bonus", row.overtimeHours > 0 ? "Credited" : "Not credited", "-", money(row.bonus)],
       ["Incentives", "-", "-", money(row.incentives || 0)],
-      ["Absence deduction", String(row.absentDays), money(deductionRate), `-${money(row.deductions)}`],
+      [
+        "Absence deduction",
+        String(row.absentDays),
+        money(deductionRate),
+        `-${money(row.deductions)}`,
+      ],
     ],
     foot: [
       ["Gross earnings", "", "", money(taxableTotal + (row.incentives || 0))],
@@ -307,9 +347,9 @@ export function downloadSalaryPdf(
   doc.save(filename);
 }
 
-export function downloadCompanyReportPdf(filename: string, report: CompanyReportData) {
+export async function downloadCompanyReportPdf(filename: string, report: CompanyReportData) {
   const id = reportId("COMP", `${report.startDate}${report.endDate}`);
-  const { doc, addFooter } = createDoc(
+  const { doc, addFooter } = await createDoc(
     "Company Payroll Report",
     `${report.startDate} to ${report.endDate}`,
     id,

@@ -53,10 +53,14 @@ function ReportsPage() {
     toast.success("Company payroll report CSV exported");
   }
 
-  function salaryPdf() {
+  async function salaryPdf() {
     if (!report) return;
-    downloadCompanyReportPdf("company-report.pdf", report);
-    toast.success("Company report PDF downloaded");
+    try {
+      await downloadCompanyReportPdf("company-report.pdf", report);
+      toast.success("Company report PDF downloaded");
+    } catch (e) {
+      toast.error("Failed to download PDF");
+    }
   }
 
   return (

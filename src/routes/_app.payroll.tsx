@@ -22,14 +22,14 @@ export const Route = createFileRoute("/_app/payroll")({
 function PayrollPage() {
   const { user } = useAuth();
   const [rows, setRows] = useState<SalaryReportRow[]>([]);
-  const [outlets, setOutlets] = useState<{id: string, name: string}[]>([]);
+  const [outlets, setOutlets] = useState<{ id: string, name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(monthStart());
   const [endDate, setEndDate] = useState(today());
   const [outletId, setOutletId] = useState<string>("");
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  
+
   const [incentiveOpen, setIncentiveOpen] = useState(false);
   const [incentiveForm, setIncentiveForm] = useState({ amount: "", reason: "" });
   const [savingIncentive, setSavingIncentive] = useState(false);
@@ -87,14 +87,18 @@ function PayrollPage() {
     toast.success("Employee salary report CSV exported");
   }
 
-  function exportPdf() {
+  async function exportPdf() {
     if (!selected) return toast.error("Select an employee first");
-    downloadSalaryPdf(`${selected.empCode}-salary-report.pdf`, selected, {
-      title: "CleanUp Payroll Report",
-      startDate,
-      endDate,
-    });
-    toast.success(`${selected.name}'s salary report downloaded`);
+    try {
+      await downloadSalaryPdf(`${selected.empCode}-salary-report.pdf`, selected, {
+        title: "Payroll Report",
+        startDate,
+        endDate,
+      });
+      toast.success(`${selected.name}'s salary report downloaded`);
+    } catch (e) {
+      toast.error("Failed to download PDF");
+    }
   }
 
   async function handleAddIncentive(e: React.FormEvent) {
@@ -145,7 +149,7 @@ function PayrollPage() {
             <Dialog open={incentiveOpen} onOpenChange={setIncentiveOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" disabled={!selected}>
-                   Add Incentive
+                  Add Incentive
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -154,21 +158,21 @@ function PayrollPage() {
                 </DialogHeader>
                 <form onSubmit={handleAddIncentive} className="space-y-4">
                   <div className="space-y-1.5">
-                     <label className="text-sm font-medium">Employee</label>
-                     <Input value={selected?.name || ""} disabled />
+                    <label className="text-sm font-medium">Employee</label>
+                    <Input value={selected?.name || ""} disabled />
                   </div>
                   <div className="space-y-1.5">
-                     <label className="text-sm font-medium">Reason</label>
-                     <Input value={incentiveForm.reason} onChange={e => setIncentiveForm({...incentiveForm, reason: e.target.value})} placeholder="e.g. Extra shift, Performance" required />
+                    <label className="text-sm font-medium">Reason</label>
+                    <Input value={incentiveForm.reason} onChange={e => setIncentiveForm({ ...incentiveForm, reason: e.target.value })} placeholder="e.g. Extra shift, Performance" required />
                   </div>
                   <div className="space-y-1.5">
-                     <label className="text-sm font-medium">Amount (₹)</label>
-                     <Input type="number" min="1" value={incentiveForm.amount} onChange={e => setIncentiveForm({...incentiveForm, amount: e.target.value})} required />
+                    <label className="text-sm font-medium">Amount (₹)</label>
+                    <Input type="number" min="1" value={incentiveForm.amount} onChange={e => setIncentiveForm({ ...incentiveForm, amount: e.target.value })} required />
                   </div>
                   <div className="flex justify-end">
-                     <Button type="submit" disabled={savingIncentive}>
-                       {savingIncentive ? "Saving..." : "Save Incentive"}
-                     </Button>
+                    <Button type="submit" disabled={savingIncentive}>
+                      {savingIncentive ? "Saving..." : "Save Incentive"}
+                    </Button>
                   </div>
                 </form>
               </DialogContent>

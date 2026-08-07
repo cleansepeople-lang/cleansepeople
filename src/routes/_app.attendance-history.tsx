@@ -31,7 +31,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/_app/attendance-history")({
-  head: () => ({ meta: [{ title: "Attendance Management - CleanUp" }] }),
+  head: () => ({ meta: [{ title: "Attendance Management - Cleans" }] }),
   component: AttendanceManagementPage,
 });
 
