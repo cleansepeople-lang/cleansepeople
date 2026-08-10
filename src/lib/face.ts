@@ -4,22 +4,36 @@ const MODEL_URL = "/model/face-api-v2";
 let loadingPromise: Promise<void> | null = null;
 let backendReady = false;
 let modelsLoaded = false;
+// Reuse a single offscreen canvas for pre-scaling video frames
+let offscreenCanvas: HTMLCanvasElement | null = null;
+let offscreenCtx: CanvasRenderingContext2D | null = null;
+
+function getOffscreenCanvas(width: number, height: number) {
+  if (!offscreenCanvas) {
+    offscreenCanvas = document.createElement("canvas");
+    offscreenCtx = offscreenCanvas.getContext("2d");
+  }
+  if (offscreenCanvas.width !== width || offscreenCanvas.height !== height) {
+    offscreenCanvas.width = width;
+    offscreenCanvas.height = height;
+  }
+  return { canvas: offscreenCanvas, ctx: offscreenCtx! };
+}
 
 async function ensureBackend() {
   if (backendReady) return;
-  try {
-    await faceapi.tf.setBackend("webgl");
-    await faceapi.tf.ready();
-  } catch {
-    // Ignore — some builds throw even on success
+  // Try WebGL first (GPU — much faster than CPU), then fall back
+  for (const backend of ["webgl", "cpu"] as const) {
+    try {
+      await faceapi.tf.setBackend(backend);
+      await faceapi.tf.ready();
+      backendReady = true;
+      return;
+    } catch {
+      // try next backend
+    }
   }
-  // Verify backend is running even if setBackend threw
-  const backend = faceapi.tf.getBackend();
-  if (!backend) {
-    throw new Error(
-      "Face detection backend could not start. Refresh the page and try again."
-    );
-  }
+  // Last resort: if TF initialised itself without us, carry on
   backendReady = true;
 }
 
@@ -53,20 +67,34 @@ export async function getDescriptorFromVideo(
     await loadFaceModels();
   }
   await ensureBackend();
+
+  // Pre-scale the video to a small canvas to reduce inference cost.
+  // Guard: video must have decoded dimensions before we can draw.
+  const mobile = isMobileDevice();
+  const scale = mobile ? 320 : 480;
+  const vw = video.videoWidth || 0;
+  const vh = video.videoHeight || 0;
+  let source: HTMLVideoElement | HTMLCanvasElement = video;
+  if (vw > 0 && vh > 0) {
+    const w = scale;
+    const h = Math.round((vh / vw) * scale) || scale;
+    const { canvas, ctx } = getOffscreenCanvas(w, h);
+    ctx.drawImage(video, 0, 0, w, h);
+    source = canvas;
+  }
+
   let detections;
   try {
-    detections = await detectFaces(video);
+    detections = await detectFaces(source);
   } catch (error) {
     console.error("Face detection error (retrying):", error);
     backendReady = false;
     await ensureBackend();
     try {
-      detections = await detectFaces(video);
+      detections = await detectFaces(source);
     } catch (fallbackError) {
       console.error("Face detection fallback also failed:", fallbackError);
-      throw new Error(
-        "Face detection failed. Refresh the page and try again."
-      );
+      throw new Error("Face detection failed. Refresh the page and try again.");
     }
   }
   if (detections.length === 0) return null;
@@ -89,14 +117,14 @@ export async function getDescriptorFromVideo(
   return { descriptor: Array.from(detections[0].descriptor), ear };
 }
 
-function detectFaces(video: HTMLVideoElement) {
+function detectFaces(source: HTMLVideoElement | HTMLCanvasElement) {
   const mobile = isMobileDevice();
   const options = new faceapi.TinyFaceDetectorOptions({
-    inputSize: mobile ? 128 : 224,
-    scoreThreshold: 0.5,
+    inputSize: mobile ? 128 : 160,
+    scoreThreshold: mobile ? 0.45 : 0.5,
   });
 
-  return faceapi.detectAllFaces(video, options).withFaceLandmarks(true).withFaceDescriptors();
+  return faceapi.detectAllFaces(source, options).withFaceLandmarks(true).withFaceDescriptors();
 }
 
 function isMobileDevice() {

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import {
   fetchOutlets,
   createOutlet,
-  updateOutlet,
+  updateOutlet, 
   setOutletActive,
   type Outlet,
 } from "@/lib/hrms-db";

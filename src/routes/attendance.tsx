@@ -52,7 +52,6 @@ function AttendanceScannerPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef(false);
   const cooldownRef = useRef<number | null>(null);
-  const hasBlinked = useRef(false);
   const locationRef = useRef<{ lat: number; long: number } | null>(null);
   // Track per-employee last action to enforce check-in/out order
   const employeeLastAction = useRef(new Map<string, "in" | "out">());
@@ -109,9 +108,9 @@ function AttendanceScannerPage() {
       ]);
       setRegistry(registeredFaces);
       setSettings(companySettings);
-      
+
       const now = new Date();
-      setAnnouncements(announcementsList.filter(a => a.active && new Date(a.expires_at) > now));
+      setAnnouncements(announcementsList.filter(a => a.active && new Date((a as any).expires_at) > now));
 
       if (registeredFaces.length === 0) {
         setState("error");
@@ -141,8 +140,8 @@ function AttendanceScannerPage() {
       navigator.hardwareConcurrency <= 4;
 
     return mobile
-      ? { facingMode: "user", width: { ideal: 320 }, height: { ideal: 480 } }
-      : { facingMode: "user", width: { ideal: 480 }, height: { ideal: 640 } };
+      ? { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } }
+      : { facingMode: "user", width: { ideal: 480 }, height: { ideal: 360 } };
   }
 
   function stopCamera() {
@@ -169,11 +168,7 @@ function AttendanceScannerPage() {
           return;
         }
 
-        const { descriptor, ear } = scanResult;
-
-        if (ear < 0.25) {
-          hasBlinked.current = true;
-        }
+        const { descriptor } = scanResult;
 
         const ranked = registeredFaces
           .map((entry) => ({
@@ -210,14 +205,7 @@ function AttendanceScannerPage() {
 
         const empId = best.entry.employeeId;
 
-        if (!hasBlinked.current) {
-          setMatched(best.entry);
-          setConfidence(score);
-          setState("scanning");
-          setMessage("Please blink to verify...");
-          cooldownRef.current = window.setTimeout(tick, 300);
-          return;
-        }
+        // (Blink check removed — instant check-in instead)
 
         const deviceSecret = localStorage.getItem("kiosk_device_secret") || "";
         const lat = locationRef.current?.lat || 0;
@@ -232,16 +220,14 @@ function AttendanceScannerPage() {
           long
         });
 
-        hasBlinked.current = false;
-
         // Track this action for order enforcement (session-level fast path)
         if (result.action === "check-in") employeeLastAction.current.set(empId, "in");
         if (result.action === "check-out") employeeLastAction.current.set(empId, "out");
 
         setMatched(best.entry);
         setConfidence(score);
-        setState(result.action === "cooldown" || result.status === "error" ? "error" : "success");
-        
+        setState(result.action === ("cooldown" as any) || result.status === "error" ? "error" : "success");
+
         if (result.status === "error") {
           setMessage(result.message || "Error recording attendance");
           toast.error(result.message || "Error");
@@ -251,11 +237,11 @@ function AttendanceScannerPage() {
               ? `Checked In ✓`
               : result.action === "check-out"
                 ? `Checked Out ✓`
-                : result.action === "cooldown"
+                : result.action === ("cooldown" as any)
                   ? `Please wait before scanning again.`
                   : `Already complete`
           );
-          if (result.action === "cooldown") {
+          if (result.action === ("cooldown" as any)) {
             toast.info(`${best.entry.name}: cooldown active`);
           } else {
             toast.success(`${best.entry.name}: ${messageForAction(result.action as any)}`);
@@ -303,9 +289,8 @@ function AttendanceScannerPage() {
         {/* ── Camera panel ── */}
         <div className="flex-1 min-h-0 min-w-0 overflow-hidden rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col">
           <div
-            className={`relative flex-1 overflow-hidden rounded-lg border-2 m-2 bg-black ${
-              isSuccess ? "border-emerald-500" : isError ? "border-destructive" : "border-border"
-            }`}
+            className={`relative flex-1 overflow-hidden rounded-lg border-2 m-2 bg-black ${isSuccess ? "border-emerald-500" : isError ? "border-destructive" : "border-border"
+              }`}
           >
             <video
               ref={videoRef}
@@ -316,13 +301,12 @@ function AttendanceScannerPage() {
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_42%,rgba(0,0,0,0.35)_78%)]" />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div
-                className={`flex aspect-[3/4] h-[65%] max-h-[360px] items-center justify-center rounded-[28px] border-2 ${
-                  isSuccess
+                className={`flex aspect-[3/4] h-[65%] max-h-[360px] items-center justify-center rounded-[28px] border-2 ${isSuccess
                     ? "border-emerald-400 shadow-[0_0_36px_rgba(52,211,153,0.35)]"
                     : isError
                       ? "border-red-400 shadow-[0_0_36px_rgba(248,113,113,0.35)]"
                       : "border-white/70"
-                }`}
+                  }`}
               >
                 {state === "booting" ? (
                   <Loader2 className="h-10 w-10 animate-spin text-white/85" />
@@ -350,9 +334,8 @@ function AttendanceScannerPage() {
             {/* Mode badge — bottom-left */}
             {action && (
               <div
-                className={`absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-white shadow-lg ${
-                  action === "in" ? "bg-emerald-600/80" : "bg-orange-600/80"
-                }`}
+                className={`absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-white shadow-lg ${action === "in" ? "bg-emerald-600/80" : "bg-orange-600/80"
+                  }`}
               >
                 {action === "in" ? <LogIn className="h-3 w-3" /> : <LogOut className="h-3 w-3" />}
                 {action === "in" ? "CHECK-IN" : "CHECK-OUT"}
@@ -394,11 +377,10 @@ function AttendanceScannerPage() {
               )}
               {isSuccess && matched && (
                 <div
-                  className={`mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                    action === "out"
+                  className={`mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${action === "out"
                       ? "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400"
                       : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
-                  }`}
+                    }`}
                 >
                   {action === "out" ? <LogOut className="h-3 w-3" /> : <LogIn className="h-3 w-3" />}
                   {message}
@@ -415,7 +397,6 @@ function AttendanceScannerPage() {
             onClick={() => {
               if (cooldownRef.current) window.clearTimeout(cooldownRef.current);
               scanningRef.current = false;
-              hasBlinked.current = false;
               setMatched(null);
               setConfidence(null);
               void boot();
@@ -443,8 +424,8 @@ function AttendanceScannerPage() {
           <div className="inline-block animate-[ticker_20s_linear_infinite]">
             {announcements.map((a, i) => (
               <span key={a.id} className="mx-8 font-medium">
-                {a.is_holiday ? "🌴 HOLIDAY: " : "📢 "}
-                {a.title} - {a.message}
+                {(a as any).is_holiday ? "🌴 HOLIDAY: " : "📢 "}
+                {a.title} - {(a as any).message || a.body}
               </span>
             ))}
           </div>

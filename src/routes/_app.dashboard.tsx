@@ -7,7 +7,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
-  XAxis,
+  XAxis, 
   YAxis,
 } from "recharts";
 import { downloadCSV } from "@/lib/csv";

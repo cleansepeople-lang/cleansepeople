@@ -157,7 +157,8 @@ function EmployeesPage() {
       if (emp && !editing && !open) {
         startEdit(emp);
         // Clear the search param so it doesn't re-trigger
-        navigate({ search: {}, replace: true });
+        const resetSearch: any = { edit: undefined };
+        navigate({ search: resetSearch, replace: true });
       }
     }
   }, [search.edit, employees, editing, open, navigate]);

@@ -6,6 +6,7 @@ import {
   type Announcement,
 } from "@/lib/hrms-db";
 import { LogIn, LogOut, Loader2, ScanFace } from "lucide-react";
+import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createFileRoute("/kiosk")({

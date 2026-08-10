@@ -21,7 +21,7 @@ import {
   fetchEmployees,
   fetchManagerAttendanceData,
   fetchOutlets,
-  recordManualCheckIn,
+  recordManualCheckIn, 
   recordManualCheckOut,
   type DashboardData,
   type DbEmployee,
