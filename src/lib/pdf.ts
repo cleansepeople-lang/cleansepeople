@@ -292,7 +292,7 @@ export async function downloadSalaryPdf(
     body: [
       ["Basic salary", number(baseHours), money(baseRate), money(row.base)],
       ["Overtime earnings", number(row.overtimeHours), money(overtimeRate), money(row.overtime)],
-      ["Fixed bonus", row.overtimeHours > 0 ? "Credited" : "Not credited", "-", money(row.bonus)],
+      ["Bonus", "Manual", "-", money(row.bonus)],
       ["Advance deduction", "-", "-", `-${money(row.advance)}`],
     ],
     foot: [
@@ -392,6 +392,7 @@ export async function downloadCompanyReportPdf(filename: string, report: Company
         "Net",
       ],
     ],
+
     body: report.payrollRows.map((row) => [
       row.empCode,
       row.name,
@@ -406,11 +407,13 @@ export async function downloadCompanyReportPdf(filename: string, report: Company
     columnStyles: {
       0: { cellWidth: 15 },
       1: { cellWidth: 30 },
-      2: { cellWidth: 20 },
+      2: { cellWidth: 21 },
       3: { halign: "center", cellWidth: 18 },
       4: { halign: "right", cellWidth: 14 },
       5: { halign: "right", cellWidth: 18 },
-      6: { halign: "right", cellWidth: 16 },
+      6: { halign: "right", cellWidth: 18 },
+      7: { halign: "right", cellWidth: 18 },
+      8: { halign: "right", cellWidth: 18 },
     },
   });
 
