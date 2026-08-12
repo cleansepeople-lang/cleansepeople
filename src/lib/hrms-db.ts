@@ -584,7 +584,7 @@ function calculatePayrollRows(
         const hourlyRate = dailyRate / 10;
         
         const earnedBase = Math.round(regularHours * hourlyRate);
-        const overtimePay = Math.round(overtimeHours * hourlyRate * settings.overtimeMultiplier);
+        const overtimePay = Math.round(overtimeHours * hourlyRate);
 
         const employeeBonuses = adjustments
           .filter(a => a.employee_id === employee.id && a.type === "bonus")

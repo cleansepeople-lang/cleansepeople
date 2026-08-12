@@ -261,42 +261,7 @@ function SettingsPage() {
               </select>
               <p className="mt-1 text-[11px] text-muted-foreground">Check-ins within this period are not marked Late.</p>
             </Field>
-            
-            <Field label="Overtime Pay Multiplier">
-              <select
-                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                value={form.overtimeMultiplier}
-                onChange={(event) => setForm({ ...form, overtimeMultiplier: Number(event.target.value) })}
-              >
-                <option value={1.0}>1.0x (Standard Pay)</option>
-                <option value={1.25}>1.25x</option>
-                <option value={1.5}>1.5x (Time and a Half)</option>
-                <option value={2.0}>2.0x (Double Pay)</option>
-              </select>
-              <p className="mt-1 text-[11px] text-muted-foreground">Multiplier applied to hourly rate during OT.</p>
-            </Field>
 
-
-
-            <Field label="Weekly Off Days">
-              <select
-                className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                value={leaveDaysText}
-                onChange={(event) => {
-                  setLeaveDaysText(event.target.value);
-                  setForm({
-                    ...form,
-                    leaveDays: event.target.value.split(" "),
-                  });
-                }}
-              >
-                <option value="Sunday">Sunday Only</option>
-                <option value="Saturday Sunday">Saturday & Sunday</option>
-                <option value="Friday">Friday Only</option>
-                <option value="Friday Saturday">Friday & Saturday</option>
-              </select>
-              <p className="mt-1 text-[11px] text-muted-foreground">Standard weekends not counted as absent.</p>
-            </Field>
           </div>
         </section>
 
