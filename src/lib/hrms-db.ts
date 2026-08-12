@@ -243,8 +243,10 @@ export type CompanyReportData = {
   payrollRows: SalaryReportRow[];
   totals: {
     present: number;
+    expectedAttendances: number;
     absent: number;
     hours: number;
+    expectedHours: number;
     overtime: number;
     bonuses: number;
     advances: number;
@@ -1686,8 +1688,10 @@ export async function fetchCompanyReport(
       payrollRows: [],
       totals: {
         present: 0,
+        expectedAttendances: 0,
         absent: 0,
         hours: 0,
+        expectedHours: 0,
         overtime: 0,
         bonuses: 0,
         advances: 0,
@@ -1720,8 +1724,10 @@ export async function fetchCompanyReport(
     payrollRows,
     totals: {
       present,
+      expectedAttendances,
       absent: Math.max(0, expectedAttendances - present),
       hours: Math.round(attendanceRows.reduce((sum, row) => sum + row.totalHours, 0) * 100) / 100,
+      expectedHours: expectedAttendances * 10,
       overtime: payrollRows.reduce((sum, row) => sum + row.overtime, 0),
       bonuses: payrollRows.reduce((sum, row) => sum + row.bonus, 0),
       advances: payrollRows.reduce((sum, row) => sum + row.advance, 0),

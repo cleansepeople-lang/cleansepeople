@@ -239,7 +239,7 @@ export async function downloadSalaryPdf(
 
   summaryCard(doc, 14, 79, 42, "Net Salary", money(row.net));
   summaryCard(doc, 60.5, 79, 42, "Worked Days", `${row.workedDays}/${row.expectedDays}`);
-  summaryCard(doc, 107, 79, 42, "Hours", number(row.regularHours));
+  summaryCard(doc, 107, 79, 42, "Hours", `${number(row.regularHours)}/${row.expectedDays * 10}`);
   summaryCard(doc, 153.5, 79, 42.5, "Overtime", number(row.overtimeHours));
 
   sectionTitle(doc, "Attendance and Work Summary", 112);
@@ -357,7 +357,7 @@ export async function downloadCompanyReportPdf(filename: string, report: Company
     "Attendance",
     `${report.totals.present}/${report.totals.present + report.totals.absent}`,
   );
-  summaryCard(doc, 107, 44, 42, "Hours", number(report.totals.hours));
+  summaryCard(doc, 107, 44, 42, "Hours", `${number(report.totals.hours)}/${report.totals.expectedHours}`);
   summaryCard(doc, 153.5, 44, 42.5, "Net Payroll", money(report.totals.net));
 
   sectionTitle(doc, "Company Spending Summary", 78);

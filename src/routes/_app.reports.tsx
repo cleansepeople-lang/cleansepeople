@@ -116,13 +116,13 @@ function ReportsPage() {
           icon={Wallet}
         />
         <StatCard
-          label="Attendance rows"
-          value={loading ? "..." : attendanceRows.length}
+          label="Attendance"
+          value={loading ? "..." : `${report?.totals.present ?? 0} / ${report?.totals.expectedAttendances ?? 0}`}
           icon={FileText}
         />
         <StatCard
           label="Hours"
-          value={loading ? "..." : (report?.totals.hours.toFixed(1) ?? "0.0")}
+          value={loading ? "..." : `${report?.totals.hours.toFixed(1) ?? "0.0"} / ${report?.totals.expectedHours ?? 0}`}
           icon={Timer}
         />
       </div>
