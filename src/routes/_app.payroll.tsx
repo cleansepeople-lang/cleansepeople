@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { downloadCSV } from "@/lib/csv";
-import { fetchSalaryReportRows, saveIncentive, fetchOutlets, type SalaryReportRow } from "@/lib/hrms-db";
+import { fetchSalaryReportRows, savePayrollAdjustment, fetchOutlets, type SalaryReportRow } from "@/lib/hrms-db";
 import { downloadSalaryPdf } from "@/lib/pdf";
 import { useAuth } from "@/lib/auth-context";
 
@@ -30,9 +30,9 @@ function PayrollPage() {
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const [incentiveOpen, setIncentiveOpen] = useState(false);
-  const [incentiveForm, setIncentiveForm] = useState({ amount: "", reason: "" });
-  const [savingIncentive, setSavingIncentive] = useState(false);
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [adjustmentForm, setAdjustmentForm] = useState({ type: "bonus", amount: "", reason: "" });
+  const [savingAdjustment, setSavingAdjustment] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -65,8 +65,7 @@ function PayrollPage() {
       net: activeRows.reduce((sum, row) => sum + row.net, 0),
       overtime: activeRows.reduce((sum, row) => sum + row.overtime, 0),
       bonus: activeRows.reduce((sum, row) => sum + row.bonus, 0),
-      deductions: activeRows.reduce((sum, row) => sum + row.deductions, 0),
-      incentives: activeRows.reduce((sum, row) => sum + (row.incentives || 0), 0),
+      advances: activeRows.reduce((sum, row) => sum + row.advance, 0),
     }),
     [activeRows],
   );
@@ -101,28 +100,28 @@ function PayrollPage() {
     }
   }
 
-  async function handleAddIncentive(e: React.FormEvent) {
+  async function handleAddAdjustment(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
-    if (!incentiveForm.amount || !incentiveForm.reason) return toast.error("Fill all fields");
-    setSavingIncentive(true);
+    if (!adjustmentForm.amount || !adjustmentForm.reason) return toast.error("Fill all fields");
+    setSavingAdjustment(true);
     try {
-      await saveIncentive({
+      await savePayrollAdjustment({
         employeeId: selected.employeeId,
-        type: "manual",
-        reason: incentiveForm.reason,
-        amount: Number(incentiveForm.amount),
+        type: adjustmentForm.type,
+        reason: adjustmentForm.reason,
+        amount: Number(adjustmentForm.amount),
         month: startDate.slice(0, 7),
         createdBy: user?.id || ""
       });
-      toast.success("Manual incentive added");
-      setIncentiveOpen(false);
-      setIncentiveForm({ amount: "", reason: "" });
+      toast.success("Adjustment added");
+      setAdjustmentOpen(false);
+      setAdjustmentForm({ type: "bonus", amount: "", reason: "" });
       load(); // Reload payroll
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to add incentive");
+      toast.error(e instanceof Error ? e.message : "Failed to add adjustment");
     } finally {
-      setSavingIncentive(false);
+      setSavingAdjustment(false);
     }
   }
 
@@ -146,32 +145,43 @@ function PayrollPage() {
               <FileText className="mr-1.5 h-4 w-4" />
               {selected ? `${selected.name}'s salary report` : "Select an employee"}
             </Button>
-            <Dialog open={incentiveOpen} onOpenChange={setIncentiveOpen}>
+            <Dialog open={adjustmentOpen} onOpenChange={setAdjustmentOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" disabled={!selected}>
-                  Add Incentive
+                  Add Bonus / Advance
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Add Manual Incentive</DialogTitle>
+                  <DialogTitle>Add Bonus or Advance</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleAddIncentive} className="space-y-4">
+                <form onSubmit={handleAddAdjustment} className="space-y-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Employee</label>
                     <Input value={selected?.name || ""} disabled />
                   </div>
                   <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Type</label>
+                    <select
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={adjustmentForm.type}
+                      onChange={e => setAdjustmentForm({ ...adjustmentForm, type: e.target.value })}
+                    >
+                      <option value="bonus">Bonus</option>
+                      <option value="advance">Advance</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
                     <label className="text-sm font-medium">Reason</label>
-                    <Input value={incentiveForm.reason} onChange={e => setIncentiveForm({ ...incentiveForm, reason: e.target.value })} placeholder="e.g. Extra shift, Performance" required />
+                    <Input value={adjustmentForm.reason} onChange={e => setAdjustmentForm({ ...adjustmentForm, reason: e.target.value })} placeholder="e.g. Festival Bonus, Medical Advance" required />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium">Amount (₹)</label>
-                    <Input type="number" min="1" value={incentiveForm.amount} onChange={e => setIncentiveForm({ ...incentiveForm, amount: e.target.value })} required />
+                    <Input type="number" min="1" value={adjustmentForm.amount} onChange={e => setAdjustmentForm({ ...adjustmentForm, amount: e.target.value })} required />
                   </div>
                   <div className="flex justify-end">
-                    <Button type="submit" disabled={savingIncentive}>
-                      {savingIncentive ? "Saving..." : "Save Incentive"}
+                    <Button type="submit" disabled={savingAdjustment}>
+                      {savingAdjustment ? "Saving..." : "Save"}
                     </Button>
                   </div>
                 </form>
@@ -236,18 +246,14 @@ function PayrollPage() {
           icon={Timer}
         />
         <StatCard
-          label="Bonuses"
-          value={`Rs ${totals.bonus.toLocaleString("en-IN")}`}
-          icon={Wallet}
-        />
-        <StatCard
-          label="Deductions"
-          value={`Rs ${totals.deductions.toLocaleString("en-IN")}`}
+
+          label="Advances"
+          value={`Rs ${totals.advances.toLocaleString("en-IN")}`}
           icon={MinusCircle}
         />
         <StatCard
-          label="Incentives"
-          value={`Rs ${totals.incentives.toLocaleString("en-IN")}`}
+          label="Bonuses"
+          value={`Rs ${totals.bonus.toLocaleString("en-IN")}`}
           icon={Wallet}
         />
       </div>
@@ -264,8 +270,7 @@ function PayrollPage() {
               <TableHead className="text-right">Base</TableHead>
               <TableHead className="text-right">Overtime</TableHead>
               <TableHead className="text-right">Bonus</TableHead>
-              <TableHead className="text-right">Incentives</TableHead>
-              <TableHead className="text-right">Deductions</TableHead>
+              <TableHead className="text-right">Advance</TableHead>
               <TableHead className="text-right">Net {outletId ? "(Outlet)" : ""}</TableHead>
               {outletId && <TableHead className="text-right">Total Earning</TableHead>}
               <TableHead>Status</TableHead>
@@ -326,11 +331,11 @@ function PayrollPage() {
                   <TableCell className="text-right tabular-nums">
                     Rs {row.bonus.toLocaleString("en-IN")}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums text-success">
-                    +Rs {(row.incentives || 0).toLocaleString("en-IN")}
+                  <TableCell className="text-right tabular-nums text-emerald-600">
+                    +Rs {(row.bonus || 0).toLocaleString("en-IN")}
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
-                    -Rs {row.deductions.toLocaleString("en-IN")}
+                    -Rs {row.advance.toLocaleString("en-IN")}
                   </TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     Rs {row.net.toLocaleString("en-IN")}

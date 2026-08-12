@@ -138,6 +138,7 @@ function ReportsPage() {
               <TableHead className="text-right">Hours</TableHead>
               <TableHead className="text-right">Overtime</TableHead>
               <TableHead className="text-right">Bonus</TableHead>
+              <TableHead className="text-right">Advance</TableHead>
               <TableHead className="text-right">Net pay</TableHead>
             </TableRow>
           </TableHeader>
@@ -182,6 +183,9 @@ function ReportsPage() {
                   <TableCell className="text-right tabular-nums">
                     Rs {row.bonus.toLocaleString("en-IN")}
                   </TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    -Rs {row.advance.toLocaleString("en-IN")}
+                  </TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     Rs {row.net.toLocaleString("en-IN")}
                   </TableCell>
@@ -192,50 +196,6 @@ function ReportsPage() {
         </Table>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card shadow-xl shadow-slate-200/50 dark:shadow-none">
-        <div className="border-b px-4 py-3 text-sm font-semibold">Attendance detail</div>
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead>Employee</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>In</TableHead>
-              <TableHead>Out</TableHead>
-              <TableHead className="text-right">Hours</TableHead>
-              <TableHead className="text-right">Face match</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {attendanceRows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
-                  {loading ? "Loading attendance..." : "No attendance rows found for this period."}
-                </TableCell>
-              </TableRow>
-            ) : (
-              attendanceRows.flatMap((row) => 
-                row.sessions.map((session) => (
-                  <TableRow key={session.id}>
-                    <TableCell>
-                      <div className="text-sm font-medium">{row.employee ?? "Employee"}</div>
-                      <div className="text-xs text-muted-foreground">{row.employeeId}</div>
-                    </TableCell>
-                    <TableCell>{row.department ?? "-"}</TableCell>
-                    <TableCell className="tabular-nums">{row.date}</TableCell>
-                    <TableCell className="tabular-nums">{session.checkIn}</TableCell>
-                    <TableCell className="tabular-nums">{session.checkOut}</TableCell>
-                    <TableCell className="text-right tabular-nums">{session.hours.toFixed(2)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{session.confidence}%</TableCell>
-                    <TableCell>{session.status}</TableCell>
-                  </TableRow>
-                ))
-              )
-            )}
-          </TableBody>
-        </Table>
-      </div>
     </div>
   );
 }

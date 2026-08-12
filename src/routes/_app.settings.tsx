@@ -37,9 +37,6 @@ const FALLBACK: CompanySettings = {
   fullDayHours: 8,
   graceMinutes: 10,
   leaveDays: ["Sunday"],
-  otAutomated: false,
-  perfectAttendanceReward: 0,
-  automatedIncentivesEnabled: false,
 };
 
 function SettingsPage() {
@@ -110,7 +107,6 @@ function SettingsPage() {
         halfDayThreshold: Number(form.halfDayThreshold),
         fullDayHours: Number(form.fullDayHours),
         graceMinutes: Number(form.graceMinutes),
-        perfectAttendanceReward: Number(form.perfectAttendanceReward),
         leaveDays: leaveDaysText.split(/\s+/).map((s) => s.trim()).filter(Boolean),
       });
       toast.success("Company settings saved");
@@ -280,18 +276,7 @@ function SettingsPage() {
               <p className="mt-1 text-[11px] text-muted-foreground">Multiplier applied to hourly rate during OT.</p>
             </Field>
 
-            <Field label="Automated Overtime">
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  type="checkbox"
-                  checked={form.otAutomated}
-                  onChange={(e) => setForm({ ...form, otAutomated: e.target.checked })}
-                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                />
-                <span className="text-sm font-medium">Auto-calculate OT</span>
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">Track overtime automatically beyond standard hours.</p>
-            </Field>
+
 
             <Field label="Weekly Off Days">
               <select
@@ -314,44 +299,6 @@ function SettingsPage() {
             </Field>
           </div>
         </section>
-
-        <section className="rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-5 shadow-xl shadow-slate-200/50 dark:shadow-none lg:col-span-2">
-          <Header icon={Wallet} title="Incentives" />
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <Field label="Enable Automated Incentives">
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  type="checkbox"
-                  checked={form.automatedIncentivesEnabled}
-                  onChange={(e) => setForm({ ...form, automatedIncentivesEnabled: e.target.checked })}
-                  className="h-4 w-4"
-                />
-                <span className="text-sm">Award perfect attendance automatically</span>
-              </div>
-            </Field>
-            <Field label="Perfect Attendance Reward (₹)">
-              <Input
-                type="number"
-                min="0"
-                value={form.perfectAttendanceReward}
-                onChange={(event) => setForm({ ...form, perfectAttendanceReward: Number(event.target.value) })}
-              />
-            </Field>
-            <Field label="Attendance Incentive Threshold (days)">
-              <Input
-                type="number"
-                min="1"
-                max="31"
-                value={form.halfDayThreshold ?? 20}
-                onChange={(event) => setForm({ ...form, halfDayThreshold: Number(event.target.value) })}
-                disabled={!form.automatedIncentivesEnabled}
-                placeholder="e.g., 20"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Reward employees present ≥ this many days</p>
-            </Field>
-          </div>
-        </section>
-
 
         <section className="rounded-2xl border border-slate-100 dark:border-[#1B3A5C] bg-card p-5 shadow-xl shadow-slate-200/50 dark:shadow-none">
           <Header icon={Building2} title="Departments" />
@@ -417,7 +364,6 @@ function SettingsPage() {
           <Header icon={Building2} title="Designations" />
           <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
             Designations are the <span className="font-medium text-foreground">job roles</span> or positions of your employees — e.g. <span className="font-medium text-foreground">Presser</span>, <span className="font-medium text-foreground">Cleaner</span>, <span className="font-medium text-foreground">Supervisor</span>. 
-            You can also set a custom <span className="font-medium text-foreground">per-hour salary deduction</span> for each designation. If left at ₹0, the system will auto-calculate based on monthly salary.
           </p>
           <form onSubmit={saveDeduction} className="mt-4">
             <p className="text-xs font-medium text-muted-foreground mb-2">Add a custom designation:</p>
@@ -439,14 +385,7 @@ function SettingsPage() {
                   <option key={dept.id} value={dept.name}>{dept.name}</option>
                 ))}
               </select>
-              <Input
-                type="number"
-                step="0.01"
-                placeholder="Per-hour deduction (₹) — optional"
-                value={designationForm.absentDayDeduction}
-                onChange={(e) => setDesignationForm({ ...designationForm, absentDayDeduction: e.target.value })}
-                className="w-52"
-              />
+
               <Button type="submit" disabled={saving}>
                 {editingDesignation ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               </Button>
@@ -463,7 +402,7 @@ function SettingsPage() {
                   <div>
                     <div className="font-medium text-foreground">{row.name}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      {row.department ? <span className="font-semibold text-primary">{row.department}</span> : <span className="italic">No Dept</span>} • {row.absentDayDeduction > 0 ? `Deducts ₹${row.absentDayDeduction}/hr` : "Uses calculated hourly rate"}
+                      {row.department ? <span className="font-semibold text-primary">{row.department}</span> : <span className="italic">No Dept</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">

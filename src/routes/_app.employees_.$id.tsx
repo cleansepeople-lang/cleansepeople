@@ -112,11 +112,9 @@ function EmployeeCard({ employee }: { employee: DbEmployee }) {
         <Info label="Manager" value={employee.manager || "-"} />
         <Info label="Department" value={employee.department} />
         <Info
-          label={employee.payType === "hourly" ? "Hourly rate" : "Monthly salary"}
-          value={`Rs ${employee.salary.toLocaleString("en-IN")}`}
+          label="Monthly salary"
+          value={`Rs ${employee.monthlySalary.toLocaleString("en-IN")}`}
         />
-        <Info label="Pay type" value={employee.payType === "hourly" ? "Hourly" : "Monthly"} />
-        <Info label="Fixed bonus" value={`Rs ${employee.fixedBonus.toLocaleString("en-IN")}`} />
       </div>
     </div>
   );

@@ -111,9 +111,7 @@ function EmployeesPage() {
     email: "",
     role: "",
     department: "",
-    payType: "monthly" as "monthly" | "hourly",
     salary: "",
-    fixedBonus: "",
     phone: "",
     manager: "",
     status: "Active",
@@ -217,9 +215,7 @@ function EmployeesPage() {
         email: form.email,
         role: form.role || designationNames[0] || "Employee",
         department: form.department,
-        payType: form.payType,
-        salary: Number(form.salary) || 0,
-        fixedBonus: Number(form.fixedBonus) || 0,
+        monthlySalary: Number(form.salary) || 0,
         phone: form.phone,
         manager: "System Manager",
       };
@@ -252,10 +248,8 @@ function EmployeesPage() {
       name: "",
       email: "",
       role: designations[0]?.name || "",
-      department: departments[0]?.name || "",
-      payType: "monthly",
+      department: "",
       salary: "",
-      fixedBonus: "",
       phone: "",
       manager: "",
       status: "Active",
@@ -275,9 +269,7 @@ function EmployeesPage() {
       email: employee.email,
       role: employee.role,
       department: employee.department,
-      payType: employee.payType,
-      salary: String(employee.salary),
-      fixedBonus: String(employee.fixedBonus),
+      salary: String(employee.monthlySalary || 0),
       phone: employee.phone,
       manager: employee.manager,
       status: employee.status || "Active",
@@ -401,9 +393,7 @@ function EmployeesPage() {
         department: e.department,
         role: e.role,
         status: e.status,
-        payType: e.payType,
-        salary: e.salary,
-        fixedBonus: e.fixedBonus,
+        monthlySalary: e.monthlySalary,
         joinDate: e.joinDate,
       })),
     );
@@ -535,33 +525,11 @@ function EmployeesPage() {
                           ))}
                         </select>
                       </Field>
-                      <Field label="Pay type">
-                        <select
-                          className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                          value={form.payType}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              payType: event.target.value as "monthly" | "hourly",
-                            })
-                          }
-                        >
-                          <option value="monthly">Monthly paid</option>
-                          <option value="hourly">Hourly paid</option>
-                        </select>
-                      </Field>
-                      <Field label={form.payType === "hourly" ? "Hourly rate" : "Monthly salary"}>
+                      <Field label="Monthly salary">
                         <Input
                           type="number"
                           value={form.salary}
                           onChange={(event) => setForm({ ...form, salary: event.target.value })}
-                        />
-                      </Field>
-                      <Field label="Fixed bonus">
-                        <Input
-                          type="number"
-                          value={form.fixedBonus}
-                          onChange={(event) => setForm({ ...form, fixedBonus: event.target.value })}
                         />
                       </Field>
                       <Field label="Contact number">
@@ -839,7 +807,7 @@ function EmployeesPage() {
                   <TableCell className="text-sm">{employee.department}</TableCell>
                   <TableCell className="text-sm">{employee.role}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {employee.payType === "hourly" ? "Hourly" : "Monthly"}
+                    Monthly
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -868,10 +836,7 @@ function EmployeesPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    Rs {employee.salary.toLocaleString("en-IN")}
-                    <div className="text-xs text-muted-foreground">
-                      + Rs {employee.fixedBonus.toLocaleString("en-IN")} bonus
-                    </div>
+                    Rs {employee.monthlySalary.toLocaleString("en-IN")}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>

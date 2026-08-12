@@ -9,7 +9,9 @@ A complete, end-to-end Human Resources Management System designed specifically f
 ## 🌟 Key Features
 
 - **Automated Face Attendance**: A public kiosk mode (`/attendance`) allows staff to check in and out simply by looking at the camera.
-- **Smart Payroll & Deductions**: Automatically calculates standard monthly salary, overtime pay, custom per-hour role deductions for absences, and fixed bonuses.
+- **Smart Payroll**: Automatically calculates standard monthly salary based on base pay and overtime.
+- **Overtime Tracking**: Overtime is calculated for hours > 10 on weekdays, and all hours on Sundays.
+- **Bonuses & Advances**: Manually issue bonuses or track salary advances.
 - **Department & Designation Logic**: Roles are tied directly to departments (e.g., "Washer" in "Cleaning Staff") for clean, structured employee onboarding.
 - **Grace Periods & Late Tracking**: Customizable shift timings and grace periods auto-flag late check-ins and half-days.
 - **Profile Image Extraction**: Captures profile pictures automatically during the math-based face registration process.

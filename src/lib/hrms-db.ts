@@ -1,10 +1,10 @@
 import { isSupabaseConfigured, supabase } from "./supabase";
 
 
-export type IncentiveRow = {
+export type PayrollAdjustmentRow = {
   id: string;
   employee_id: string;
-  type: string;
+  type: "bonus" | "advance";
   reason: string;
   amount: number;
   month: string;
@@ -38,11 +38,7 @@ export type DbEmployee = {
   role: string;
   department: string;
   phone: string;
-  payType: "monthly" | "hourly";
-  salary: number;
   monthlySalary: number;
-  hourlyRate: number;
-  fixedBonus: number;
   manager: string;
   initialLogin: string;
   status: "Active" | "On Leave" | "Inactive" | string;
@@ -94,11 +90,8 @@ type EmployeeRow = {
   role: string;
   department: string;
   phone: string | null;
-  pay_type?: "monthly" | "hourly" | null;
-  salary: number | string | null;
+  salary?: number | string | null;
   monthly_salary?: number | string | null;
-  hourly_rate?: number | string | null;
-  fixed_bonus?: number | string | null;
   manager: string | null;
   initial_login: string | null;
   status: string;
@@ -151,10 +144,7 @@ export type CompanySettings = {
   halfDayThreshold?: number;
   fullDayHours?: number;
   graceMinutes?: number;
-  perfectAttendanceReward?: number;
-  otAutomated?: boolean;
   leaveDays?: string[];
-  automatedIncentivesEnabled?: boolean;
 };
 
 export type DesignationDeduction = {
@@ -233,10 +223,9 @@ export type SalaryReportRow = {
   base: number;
   overtime: number;
   bonus: number;
-  deductions: number;
+  advance: number;
   net: number;
   status: string;
-  incentives?: number;
   profileImage?: string | null;
   globalRegularHours?: number;
   globalOvertimeHours?: number;
@@ -258,8 +247,7 @@ export type CompanyReportData = {
     hours: number;
     overtime: number;
     bonuses: number;
-    incentives: number;
-    deductions: number;
+    advances: number;
     net: number;
   };
 };
@@ -309,11 +297,7 @@ export function mapEmployee(row: EmployeeRow): DbEmployee {
     role: row.role,
     department: row.department,
     phone: row.phone ?? "",
-    payType: row.pay_type === "hourly" ? "hourly" : "monthly",
-    salary: Number(row.salary ?? 0),
-    monthlySalary: Number(row.monthly_salary ?? row.salary ?? 0),
-    hourlyRate: Number(row.hourly_rate ?? 0),
-    fixedBonus: Number(row.fixed_bonus ?? 0),
+    monthlySalary: Number(row.monthly_salary || row.salary || 0),
     manager: row.manager ?? "",
     initialLogin: row.initial_login ?? "",
     status: row.status,
@@ -548,24 +532,14 @@ function calculatePayrollRows(
   settings: CompanySettings,
   startDate: string,
   endDate: string,
-  deductions: DesignationDeduction[] = [],
   holidays: Set<string> = new Set(),
-  manualIncentives: IncentiveRow[] = [],
+  adjustments: PayrollAdjustmentRow[] = [],
   outletId?: string,
 ): SalaryReportRow[] {
   const workDates = eachDate(startDate, endDate).filter(isWorkday);
   const expectedDays = workDates.length;
-  const payableHoursPerDay = 10; // Rule: 11 hours standard, 10 hours billable (1 hr lunch)
-  const expectedHours = expectedDays * payableHoursPerDay;
-  const standardMonthDays = 30; // Rule: Salary is allocated strictly across a 30-day month
 
   const attendanceByEmployee = new Map<string, AttendanceRow[]>();
-  const deductionByDesignation = new Map(
-    deductions.map((deduction) => [
-      deduction.designation.trim().toLowerCase(),
-      deduction.absentDayDeduction,
-    ]),
-  );
 
   attendance.forEach((row) => {
     if (!row.employee_id) return;
@@ -589,74 +563,51 @@ function calculatePayrollRows(
           hoursByDate.set(row.date, prev + h);
         });
 
-        const halfDay = 5; 
         let workedDays = 0;
-        let totalPayableHours = 0;
+        let regularHours = 0;
+        let overtimeHours = 0;
 
-        hoursByDate.forEach((rawHours) => {
-          const dailyPayable = Math.min(rawHours, payableHoursPerDay);
-          if (rawHours >= halfDay) workedDays++;
-          totalPayableHours += dailyPayable;
-        });
-
-        holidays.forEach(hDate => {
-          if (hDate >= startDate && hDate <= endDate && isWorkday(hDate)) {
-            const logged = hoursByDate.get(hDate) || 0;
-            if (logged < halfDay) {
-               workedDays++;
-               totalPayableHours += Math.max(0, payableHoursPerDay - logged);
-            }
+        hoursByDate.forEach((rawHours, date) => {
+          if (rawHours >= 5) workedDays++; // Half day threshold = 5 hours
+          
+          // Detect Sunday (day === 0)
+          if (new Date(`${date}T00:00:00`).getDay() === 0) {
+            overtimeHours += rawHours;
+          } else {
+            regularHours += Math.min(rawHours, 10);
+            overtimeHours += Math.max(0, rawHours - 10);
           }
         });
 
-        totalPayableHours = Math.round(totalPayableHours * 100) / 100;
         const absentDays = Math.max(0, expectedDays - workedDays);
-        const regularHours = Math.min(totalPayableHours, expectedHours);
-        const overtimeHours = Math.max(0, Math.round((totalPayableHours - expectedHours) * 100) / 100);
         
-        const bonus = overtimeHours > 0 ? employee.fixedBonus : 0;
-        const hourlyRate = employee.payType === "hourly"
-            ? employee.hourlyRate
-            : (employee.monthlySalary / standardMonthDays) / payableHoursPerDay;
-
-        const expectedBase = employee.payType === "hourly" 
-            ? expectedHours * hourlyRate 
-            : (employee.monthlySalary / standardMonthDays) * expectedDays;
-
-        const missingHours = Math.max(0, expectedHours - regularHours);
-        const designationRule = deductions.find(d => d.designation === employee.role);
-        const customDeductionRate = designationRule ? designationRule.absentDayDeduction : 0;
-        // customDeductionRate is a daily penalty, so we divide by payableHoursPerDay for the hourly equivalent
-        const customHourlyDeductionRate = customDeductionRate > 0 ? customDeductionRate / payableHoursPerDay : 0;
-        const deductionRate = customHourlyDeductionRate > 0 ? customHourlyDeductionRate : hourlyRate;
-        const hourlyDeduction = missingHours * deductionRate;
-
-        let automatedIncentive = 0;
-        const rewardAmount = settings.perfectAttendanceReward ?? 0;
-        if (settings.automatedIncentivesEnabled && rewardAmount > 0 && workedDays >= expectedDays) {
-            automatedIncentive = rewardAmount;
-        }
-
-        const employeeManualIncentives = manualIncentives
-          .filter(i => i.employee_id === employee.id)
-          .reduce((sum, i) => sum + Number(i.amount || 0), 0);
-        const totalIncentives = automatedIncentive + employeeManualIncentives;
-
-        const overtime = overtimeHours * hourlyRate * settings.overtimeMultiplier;
+        // Dynamic daily/hourly rate based on exact working days in the month
+        const dailyRate = expectedDays > 0 ? (employee.monthlySalary / expectedDays) : 0;
+        const hourlyRate = dailyRate / 10;
         
-        // Penalties/deductions for absence should only eat into the base pay.
-        // Overtime, bonuses, and manual incentives are guaranteed additions.
-        const earnedBase = Math.max(0, expectedBase - hourlyDeduction);
-        const net = earnedBase + overtime + bonus + totalIncentives;
+        const earnedBase = Math.round(regularHours * hourlyRate);
+        const overtimePay = Math.round(overtimeHours * hourlyRate * settings.overtimeMultiplier);
+
+        const employeeBonuses = adjustments
+          .filter(a => a.employee_id === employee.id && a.type === "bonus")
+          .reduce((sum, a) => sum + Number(a.amount || 0), 0);
+          
+        const employeeAdvances = adjustments
+          .filter(a => a.employee_id === employee.id && a.type === "advance")
+          .reduce((sum, a) => sum + Number(a.amount || 0), 0);
+
+        const netPay = Math.round(earnedBase + overtimePay + employeeBonuses - employeeAdvances);
 
         return {
-          workedDays, absentDays, regularHours, overtimeHours,
-          base: Math.round(expectedBase),
-          overtime: Math.round(overtime),
-          bonus: Math.round(bonus),
-          incentives: Math.round(totalIncentives),
-          deductions: Math.round(hourlyDeduction),
-          net: Math.round(net)
+          workedDays, 
+          absentDays, 
+          regularHours: Math.round(regularHours * 100) / 100, 
+          overtimeHours: Math.round(overtimeHours * 100) / 100,
+          base: earnedBase,
+          overtime: overtimePay,
+          bonus: employeeBonuses,
+          advance: employeeAdvances,
+          net: netPay
         };
       }
 
@@ -669,7 +620,7 @@ function calculatePayrollRows(
         name: employee.name,
         designation: employee.role,
         department: employee.department,
-        payType: employee.payType,
+        payType: "monthly",
         period: rangeLabel(startDate, endDate),
         startDate,
         endDate,
@@ -683,8 +634,7 @@ function calculatePayrollRows(
         base: localMetrics.base,
         overtime: localMetrics.overtime,
         bonus: localMetrics.bonus,
-        incentives: localMetrics.incentives,
-        deductions: localMetrics.deductions,
+        advance: localMetrics.advance,
         net: localMetrics.net,
         status: allRows.some((row) => !row.check_out) ? "Ongoing" : "Calculated",
 
@@ -791,9 +741,7 @@ export async function createEmployee(payload: {
   email?: string;
   role: string;
   department: string;
-  payType: "monthly" | "hourly";
-  salary: number;
-  fixedBonus: number;
+  monthlySalary: number;
   phone: string;
   manager: string;
 }) {
@@ -809,11 +757,11 @@ export async function createEmployee(payload: {
       role: payload.role,
       department: payload.department,
       phone: payload.phone,
-      pay_type: payload.payType,
-      salary: payload.salary,
-      monthly_salary: payload.payType === "monthly" ? payload.salary : 0,
-      hourly_rate: payload.payType === "hourly" ? payload.salary : 0,
-      fixed_bonus: payload.fixedBonus,
+      pay_type: "monthly",
+      salary: payload.monthlySalary,
+      monthly_salary: payload.monthlySalary,
+      hourly_rate: 0,
+      fixed_bonus: 0,
       manager: payload.manager,
       initial_login: null,
       status: "Active",
@@ -832,9 +780,7 @@ export async function updateEmployee(
     email?: string;
     role: string;
     department: string;
-    payType: "monthly" | "hourly";
-    salary: number;
-    fixedBonus: number;
+    monthlySalary: number;
     phone: string;
     manager: string;
     status: string;
@@ -850,11 +796,11 @@ export async function updateEmployee(
       role: payload.role,
       department: payload.department,
       phone: payload.phone,
-      pay_type: payload.payType,
-      salary: payload.salary,
-      monthly_salary: payload.payType === "monthly" ? payload.salary : 0,
-      hourly_rate: payload.payType === "hourly" ? payload.salary : 0,
-      fixed_bonus: payload.fixedBonus,
+      pay_type: "monthly",
+      salary: payload.monthlySalary,
+      monthly_salary: payload.monthlySalary,
+      hourly_rate: 0,
+      fixed_bonus: 0,
       manager: payload.manager,
       status: payload.status,
     })
@@ -953,9 +899,8 @@ export async function fetchDashboardData(outletId?: string): Promise<DashboardDa
   const today = dateKey();
   const weekStart = dateKey(-6);
   const monthStart = currentMonthStart();
-  const [settings, deductionRules] = await Promise.all([
+  const [settings] = await Promise.all([
     fetchCompanySettings(),
-    fetchDesignationDeductions(),
   ]);
   const [employeesRes, attendanceRes] = await Promise.all([
     supabase
@@ -1010,12 +955,11 @@ export async function fetchDashboardData(outletId?: string): Promise<DashboardDa
   const holidays = await fetchHolidays(monthStart, today);
 
   const payrollRows = calculatePayrollRows(
-    activeEmployees,
+    employees,
     attendance,
     settings,
     monthStart,
     today,
-    deductionRules,
     holidays,
     [],
     outletId
@@ -1054,17 +998,14 @@ export async function fetchCompanySettings(): Promise<CompanySettings> {
   if (!supabase) {
     return {
       faceThreshold: 80,
-      shiftStart: "09:30",
-      shiftEnd: "18:30",
-      overtimeMultiplier: 1.5,
-      attendanceCooldownMinutes: 1,
+      shiftStart: "09:00",
+      shiftEnd: "19:00",
+      overtimeMultiplier: 1.0,
+      attendanceCooldownMinutes: 15,
       halfDayThreshold: 4,
       fullDayHours: 8,
       graceMinutes: 10,
       leaveDays: ["Sunday"],
-      otAutomated: false,
-      perfectAttendanceReward: 0,
-      automatedIncentivesEnabled: false,
     };
   }
 
@@ -1078,9 +1019,9 @@ export async function fetchCompanySettings(): Promise<CompanySettings> {
   const legacyCooldownSeconds = Number(data?.attendance_cooldown_seconds ?? 60);
   return {
     faceThreshold: Number(data?.face_threshold ?? 80),
-    shiftStart: String(data?.shift_start ?? "09:30").slice(0, 5),
-    shiftEnd: String(data?.shift_end ?? "18:30").slice(0, 5),
-    overtimeMultiplier: Number(data?.overtime_multiplier ?? 1.5),
+    shiftStart: String(data?.shift_start ?? "09:00").slice(0, 5),
+    shiftEnd: String(data?.shift_end ?? "19:00").slice(0, 5),
+    overtimeMultiplier: Number(data?.overtime_multiplier ?? 1.0),
     attendanceCooldownMinutes: Number(
       data?.attendance_cooldown_minutes ?? Math.max(1, Math.ceil(legacyCooldownSeconds / 60)),
     ),
@@ -1088,9 +1029,6 @@ export async function fetchCompanySettings(): Promise<CompanySettings> {
     fullDayHours: Number(data?.full_day_hours ?? 8),
     graceMinutes: Number(data?.grace_minutes ?? 10),
     leaveDays: Array.isArray(data?.leave_days) ? data.leave_days : ["Sunday"],
-    otAutomated: Boolean(data?.ot_automated ?? false),
-    perfectAttendanceReward: Number(data?.perfect_attendance_reward ?? 0),
-    automatedIncentivesEnabled: Boolean(data?.automated_incentives_enabled ?? false),
   };
 }
 
@@ -1107,9 +1045,6 @@ export async function updateCompanySettings(payload: CompanySettings) {
     full_day_hours: payload.fullDayHours ?? 8,
     grace_minutes: payload.graceMinutes ?? 10,
     leave_days: payload.leaveDays ?? ["Sunday"],
-    ot_automated: payload.otAutomated ?? false,
-    perfect_attendance_reward: payload.perfectAttendanceReward ?? 0,
-    automated_incentives_enabled: payload.automatedIncentivesEnabled ?? false,
     updated_at: new Date().toISOString(),
   });
   if (error) throw error;
@@ -1573,9 +1508,8 @@ export async function fetchManagerAttendanceData(date: string): Promise<ManagerA
 export async function fetchSalaryReportRows(startDate = currentMonthStart(), endDate = dateKey(), outletId?: string) {
   if (!supabase) return [] as SalaryReportRow[];
 
-  const [settings, deductionRules, employeesRes, attendanceRes, holidays, incentives] = await Promise.all([
+  const [settings, employeesRes, attendanceRes, holidays, adjustments] = await Promise.all([
     fetchCompanySettings(),
-    fetchDesignationDeductions(),
     supabase.from("employees").select(employeeSelect()).order("full_name", { ascending: true }),
     supabase
       .from("attendance_sessions")
@@ -1583,7 +1517,7 @@ export async function fetchSalaryReportRows(startDate = currentMonthStart(), end
       .gte("date", startDate)
       .lte("date", endDate),
     fetchHolidays(startDate, endDate),
-    fetchIncentives(startDate, endDate)
+    fetchPayrollAdjustments(startDate, endDate)
   ]);
 
   const error = employeesRes.error ?? attendanceRes.error;
@@ -1591,7 +1525,7 @@ export async function fetchSalaryReportRows(startDate = currentMonthStart(), end
 
   const employees = ((employeesRes.data ?? []) as unknown as EmployeeRow[]).map(mapEmployee);
   const attendance = (attendanceRes.data ?? []) as unknown as AttendanceRow[];
-  return calculatePayrollRows(employees, attendance, settings, startDate, endDate, deductionRules, holidays, incentives, outletId);
+  return calculatePayrollRows(employees, attendance, settings, startDate, endDate, holidays, adjustments, outletId);
 }
 
 export type Outlet = {
@@ -1760,8 +1694,7 @@ export async function fetchCompanyReport(
         hours: 0,
         overtime: 0,
         bonuses: 0,
-        incentives: 0,
-        deductions: 0,
+        advances: 0,
         net: 0,
       },
     };
@@ -1795,8 +1728,7 @@ export async function fetchCompanyReport(
       hours: Math.round(attendanceRows.reduce((sum, row) => sum + row.totalHours, 0) * 100) / 100,
       overtime: payrollRows.reduce((sum, row) => sum + row.overtime, 0),
       bonuses: payrollRows.reduce((sum, row) => sum + row.bonus, 0),
-      incentives: payrollRows.reduce((sum, row) => sum + (row.incentives || 0), 0),
-      deductions: payrollRows.reduce((sum, row) => sum + row.deductions, 0),
+      advances: payrollRows.reduce((sum, row) => sum + row.advance, 0),
       net: payrollRows.reduce((sum, row) => sum + row.net, 0),
     },
   };
@@ -1821,9 +1753,8 @@ export async function fetchAIInsights(): Promise<AIInsightsData> {
     };
   }
 
-  const [settings, deductionRules, employeesRes, attendanceRes] = await Promise.all([
+  const [settings, employeesRes, attendanceRes] = await Promise.all([
     fetchCompanySettings(),
-    fetchDesignationDeductions(),
     supabase.from("employees").select(employeeSelect()),
     supabase
       .from("attendance_sessions")
@@ -1869,7 +1800,7 @@ export async function fetchAIInsights(): Promise<AIInsightsData> {
   const overtimeHours = workdayTrend.map((row) => row.overtime);
   const lateCounts = workdayTrend.map((row) => row.late);
   const holidays = await fetchHolidays(startDate, endDate);
-  const incentives = await fetchIncentives(startDate, endDate);
+  const adjustments = await fetchPayrollAdjustments(startDate, endDate);
   
   const payrollRows = calculatePayrollRows(
     activeEmployees,
@@ -1877,9 +1808,8 @@ export async function fetchAIInsights(): Promise<AIInsightsData> {
     settings,
     startDate,
     endDate,
-    deductionRules,
     holidays,
-    incentives
+    adjustments
   );
 
   const predictedAttendanceRate = Math.max(
@@ -2039,19 +1969,19 @@ export async function recordManualCheckOut(employeeId: string, managerId: string
   return { hours };
 }
 
-export async function fetchIncentives(startDate: string, endDate: string) {
+export async function fetchPayrollAdjustments(startDate: string, endDate: string) {
   if (!supabase) return [];
   const { data, error } = await supabase
-    .from("incentives")
+    .from("payroll_adjustments")
     .select("*")
     .eq("month", startDate.slice(0, 7));
   if (error) throw error;
-  return data as unknown as IncentiveRow[];
+  return data as unknown as PayrollAdjustmentRow[];
 }
 
-export async function saveIncentive(payload: { employeeId: string; type: string; reason: string; amount: number; month: string; createdBy: string }) {
+export async function savePayrollAdjustment(payload: { employeeId: string; type: string; reason: string; amount: number; month: string; createdBy: string }) {
   if (!supabase) throw new Error("Supabase is not configured");
-  const { error } = await supabase.from("incentives").insert({
+  const { error } = await supabase.from("payroll_adjustments").insert({
     employee_id: payload.employeeId,
     type: payload.type,
     reason: payload.reason,

@@ -282,7 +282,6 @@ export async function downloadSalaryPdf(
   const baseRate =
     row.payType === "hourly" && row.regularHours ? row.base / row.regularHours : row.base;
   const overtimeRate = row.overtimeHours ? row.overtime / row.overtimeHours : 0;
-  const deductionRate = row.absentDays ? row.deductions / row.absentDays : 0;
   const taxableTotal = row.base + row.overtime + row.bonus;
 
   const breakdownY = finalY(doc, 135) + 12;
@@ -294,17 +293,11 @@ export async function downloadSalaryPdf(
       ["Basic salary", number(baseHours), money(baseRate), money(row.base)],
       ["Overtime earnings", number(row.overtimeHours), money(overtimeRate), money(row.overtime)],
       ["Fixed bonus", row.overtimeHours > 0 ? "Credited" : "Not credited", "-", money(row.bonus)],
-      ["Incentives", "-", "-", money(row.incentives || 0)],
-      [
-        "Absence deduction",
-        String(row.absentDays),
-        money(deductionRate),
-        `-${money(row.deductions)}`,
-      ],
+      ["Advance deduction", "-", "-", `-${money(row.advance)}`],
     ],
     foot: [
-      ["Gross earnings", "", "", money(taxableTotal + (row.incentives || 0))],
-      ["Total deductions", "", "", `-${money(row.deductions)}`],
+      ["Gross earnings", "", "", money(taxableTotal)],
+      ["Total deductions", "", "", `-${money(row.advance)}`],
       ["Net payable", "", "", money(row.net)],
     ],
     columnStyles: {
@@ -370,14 +363,13 @@ export async function downloadCompanyReportPdf(filename: string, report: Company
   sectionTitle(doc, "Company Spending Summary", 78);
   table(doc, {
     startY: 83,
-    head: [["Base Payroll", "Overtime", "Bonuses", "Incentives", "Deductions", "Net Payroll"]],
+    head: [["Base Payroll", "Overtime", "Bonuses", "Advances", "Net Payroll"]],
     body: [
       [
         money(report.payrollRows.reduce((sum, row) => sum + row.base, 0)),
         money(report.totals.overtime),
         money(report.totals.bonuses),
-        money(report.totals.incentives),
-        `-${money(report.totals.deductions)}`,
+        `-${money(report.totals.advances)}`,
         money(report.totals.net),
       ],
     ],
@@ -395,9 +387,8 @@ export async function downloadCompanyReportPdf(filename: string, report: Company
         "Attendance",
         "Hours",
         "Overtime",
-        "Bonus",
-        "Incentives",
-        "Deductions",
+        "Bonuses",
+        "Advances",
         "Net",
       ],
     ],
@@ -409,8 +400,7 @@ export async function downloadCompanyReportPdf(filename: string, report: Company
       number(row.regularHours),
       money(row.overtime),
       money(row.bonus),
-      money(row.incentives || 0),
-      `-${money(row.deductions)}`,
+      `-${money(row.advance)}`,
       money(row.net),
     ]),
     columnStyles: {
@@ -421,40 +411,6 @@ export async function downloadCompanyReportPdf(filename: string, report: Company
       4: { halign: "right", cellWidth: 14 },
       5: { halign: "right", cellWidth: 18 },
       6: { halign: "right", cellWidth: 16 },
-      7: { halign: "right", cellWidth: 16 },
-      8: { halign: "right", cellWidth: 18 },
-      9: { halign: "right", cellWidth: 18, fontStyle: "bold" },
-    },
-  });
-
-  const attendanceY = finalY(doc, payrollY + 80) + 12;
-  sectionTitle(doc, "Attendance Detail", attendanceY);
-  table(doc, {
-    startY: attendanceY + 5,
-    head: [
-      ["Date", "Employee", "Employee ID", "Department", "In", "Out", "Hours", "Match", "Status"],
-    ],
-    body: report.attendanceRows.map((row) => [
-      row.date,
-      row.employee ?? "-",
-      row.employeeId ?? "-",
-      row.department ?? "-",
-      row.firstIn,
-      row.lastOut,
-      number(row.totalHours),
-      `${Math.round(row.confidence)}%`,
-      row.status,
-    ]),
-    columnStyles: {
-      0: { cellWidth: 20 },
-      1: { cellWidth: 30 },
-      2: { cellWidth: 22 },
-      3: { cellWidth: 24 },
-      4: { cellWidth: 16 },
-      5: { cellWidth: 16 },
-      6: { halign: "right", cellWidth: 16 },
-      7: { halign: "right", cellWidth: 16 },
-      8: { cellWidth: 22 },
     },
   });
 
