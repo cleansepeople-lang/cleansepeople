@@ -229,8 +229,8 @@ function EmployeesPage() {
       toast.success(`${form.name} ${editing ? "updated" : "saved"} — now register their face`);
       // Switch to face tab
       setActiveTab("face");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save employee");
+    } catch (err: any) {
+      toast.error(err?.message || err?.details || "Could not save employee");
     } finally {
       setSaving(false);
     }
