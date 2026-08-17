@@ -117,12 +117,12 @@ function ReportsPage() {
         />
         <StatCard
           label="Attendance"
-          value={loading ? "..." : `${report?.totals.present ?? 0} / ${report?.totals.expectedAttendances ?? 0}`}
+          value={loading ? "..." : report?.totals.present ?? 0}
           icon={FileText}
         />
         <StatCard
           label="Hours"
-          value={loading ? "..." : `${report?.totals.hours.toFixed(1) ?? "0.0"} / ${report?.totals.expectedHours ?? 0}`}
+          value={loading ? "..." : report?.totals.hours.toFixed(1) ?? "0.0"}
           icon={Timer}
         />
       </div>
