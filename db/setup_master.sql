@@ -1,20 +1,21 @@
 -- =====================================================================================
--- MASTER SCHEMA INITIALIZATION SCRIPT FOR CLEANS HRMS
--- This script reconstructs the entire database schema including tables,
--- triggers, RPC functions, RLS policies, and default seed data.
+-- SAFE & NON-DESTRUCTIVE MASTER SCHEMA INITIALIZATION SCRIPT FOR CLEANS HRMS
+-- This script safely creates missing tables, columns, RLS policies, triggers,
+-- and syncs existing auth.users into profiles and user_roles without deleting data.
 -- Run this script in your Supabase SQL Editor.
 -- =====================================================================================
 
--- 1. CLEAN SLATE: Drop the public schema and recreate it
-DROP SCHEMA IF EXISTS public CASCADE;
-CREATE SCHEMA public;
+-- 1. SCHEMA & EXTENSIONS
+CREATE SCHEMA IF NOT EXISTS public;
 GRANT ALL ON SCHEMA public TO postgres, public, anon, authenticated, service_role;
-
--- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 2. ENUM TYPES
-CREATE TYPE public.app_role AS ENUM ('manager', 'employee');
+DO $$ BEGIN
+  CREATE TYPE public.app_role AS ENUM ('manager', 'employee');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
 -- 3. HELPER FUNCTIONS
 CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role text)
@@ -29,10 +30,10 @@ BEGIN
 END;
 $$;
 
--- 4. TABLES
+-- 4. TABLES (NON-DESTRUCTIVE)
 
 -- PROFILES
-CREATE TABLE public.profiles (
+CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name text,
   email text,
@@ -41,7 +42,7 @@ CREATE TABLE public.profiles (
 );
 
 -- USER ROLES
-CREATE TABLE public.user_roles (
+CREATE TABLE IF NOT EXISTS public.user_roles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   role public.app_role NOT NULL DEFAULT 'employee',
@@ -49,7 +50,7 @@ CREATE TABLE public.user_roles (
 );
 
 -- OUTLETS
-CREATE TABLE public.outlets (
+CREATE TABLE IF NOT EXISTS public.outlets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   latitude numeric NOT NULL DEFAULT 0,
@@ -60,7 +61,7 @@ CREATE TABLE public.outlets (
 );
 
 -- KIOSK DEVICES
-CREATE TABLE public.kiosk_devices (
+CREATE TABLE IF NOT EXISTS public.kiosk_devices (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   outlet_id uuid NOT NULL REFERENCES public.outlets(id) ON DELETE CASCADE,
   device_secret uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -70,7 +71,7 @@ CREATE TABLE public.kiosk_devices (
 );
 
 -- EMPLOYEES
-CREATE TABLE public.employees (
+CREATE TABLE IF NOT EXISTS public.employees (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   emp_code text UNIQUE NOT NULL,
   full_name text NOT NULL,
@@ -89,11 +90,11 @@ CREATE TABLE public.employees (
 );
 
 -- ATTENDANCE SESSIONS
-CREATE TABLE public.attendance_sessions (
+CREATE TABLE IF NOT EXISTS public.attendance_sessions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id uuid NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
   user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  outlet_id uuid REFERENCES public.outlets(id) ON DELETE RESTRICT, -- NULLABLE FOR MANUAL CHECK-INS
+  outlet_id uuid REFERENCES public.outlets(id) ON DELETE RESTRICT,
   date date NOT NULL,
   check_in timestamptz NOT NULL,
   check_out timestamptz,
@@ -104,7 +105,7 @@ CREATE TABLE public.attendance_sessions (
 );
 
 -- FACE DESCRIPTORS
-CREATE TABLE public.face_descriptors (
+CREATE TABLE IF NOT EXISTS public.face_descriptors (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id uuid NOT NULL UNIQUE REFERENCES public.employees(id) ON DELETE CASCADE,
   user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -113,7 +114,7 @@ CREATE TABLE public.face_descriptors (
 );
 
 -- FACE RESET REQUESTS
-CREATE TABLE public.face_reset_requests (
+CREATE TABLE IF NOT EXISTS public.face_reset_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   reason text NOT NULL,
@@ -125,7 +126,7 @@ CREATE TABLE public.face_reset_requests (
 );
 
 -- COMPANY SETTINGS
-CREATE TABLE public.company_settings (
+CREATE TABLE IF NOT EXISTS public.company_settings (
   id boolean PRIMARY KEY DEFAULT true,
   face_threshold numeric NOT NULL DEFAULT 80,
   shift_start time NOT NULL DEFAULT '09:30',
@@ -144,7 +145,7 @@ CREATE TABLE public.company_settings (
 INSERT INTO public.company_settings (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
 
 -- DEPARTMENTS
-CREATE TABLE public.departments (
+CREATE TABLE IF NOT EXISTS public.departments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text UNIQUE NOT NULL,
   active boolean NOT NULL DEFAULT true,
@@ -153,7 +154,7 @@ CREATE TABLE public.departments (
 );
 
 -- DESIGNATIONS
-CREATE TABLE public.designations (
+CREATE TABLE IF NOT EXISTS public.designations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text UNIQUE NOT NULL,
   absent_day_deduction numeric NOT NULL DEFAULT 0,
@@ -164,7 +165,7 @@ CREATE TABLE public.designations (
 );
 
 -- ANNOUNCEMENTS
-CREATE TABLE public.announcements (
+CREATE TABLE IF NOT EXISTS public.announcements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title text NOT NULL,
   body text,
@@ -173,8 +174,8 @@ CREATE TABLE public.announcements (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
--- PAYROLL ADJUSTMENTS (BONUS & ADVANCE)
-CREATE TABLE public.payroll_adjustments (
+-- PAYROLL ADJUSTMENTS
+CREATE TABLE IF NOT EXISTS public.payroll_adjustments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   employee_id uuid NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
   type text NOT NULL DEFAULT 'bonus',
@@ -187,7 +188,6 @@ CREATE TABLE public.payroll_adjustments (
 
 -- 5. RPC & TRIGGERS
 
--- Handle New Auth User
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -210,74 +210,16 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Handle Kiosk Check-In / Check-Out
-CREATE OR REPLACE FUNCTION public.mark_session_attendance(
-  _device_secret uuid,
-  _lat numeric,
-  _long numeric,
-  _employee_id uuid,
-  _action text
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE
-  _outlet record;
-  _device record;
-  _distance numeric;
-  _session record;
-BEGIN
-  SELECT * INTO _device FROM public.kiosk_devices WHERE device_secret = _device_secret AND active = true;
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Invalid or inactive device secret.');
-  END IF;
+-- Auto-sync any existing auth users into profiles and user_roles as manager
+INSERT INTO public.profiles (id, full_name, email)
+SELECT id, coalesce(raw_user_meta_data->>'full_name', email), email
+FROM auth.users
+ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, email = EXCLUDED.email;
 
-  SELECT * INTO _outlet FROM public.outlets WHERE id = _device.outlet_id AND active = true;
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Outlet not found or inactive.');
-  END IF;
-
-  IF _lat IS NOT NULL AND _long IS NOT NULL AND _lat != 0 AND _long != 0 THEN
-    _distance := 6371000 * acos(
-      cos(radians(_outlet.latitude)) * cos(radians(_lat)) *
-      cos(radians(_long) - radians(_outlet.longitude)) +
-      sin(radians(_outlet.latitude)) * sin(radians(_lat))
-    );
-    IF _distance > _outlet.geofence_radius_meters THEN
-      RETURN jsonb_build_object('success', false, 'error', 'Device is outside designated outlet geofence. Distance: ' || _distance || 'm');
-    END IF;
-  END IF;
-
-  IF _action = 'in' THEN
-    SELECT * INTO _session FROM public.attendance_sessions 
-    WHERE employee_id = _employee_id AND check_out IS NULL 
-    ORDER BY check_in DESC LIMIT 1;
-
-    IF FOUND THEN
-      RETURN jsonb_build_object('success', false, 'error', 'Employee already has an open session. Please check out first.');
-    END IF;
-
-    INSERT INTO public.attendance_sessions (employee_id, outlet_id, date, check_in)
-    VALUES (_employee_id, _outlet.id, current_date, now());
-    RETURN jsonb_build_object('success', true, 'message', 'Checked in successfully at ' || _outlet.name);
-
-  ELSIF _action = 'out' THEN
-    SELECT * INTO _session FROM public.attendance_sessions 
-    WHERE employee_id = _employee_id AND check_out IS NULL 
-    ORDER BY check_in DESC LIMIT 1;
-
-    IF NOT FOUND THEN
-      RETURN jsonb_build_object('success', false, 'error', 'No open session found to check out of.');
-    END IF;
-
-    UPDATE public.attendance_sessions 
-    SET 
-      check_out = now(),
-      hours_worked = extract(epoch from (now() - check_in)) / 3600.0
-    WHERE id = _session.id;
-    RETURN jsonb_build_object('success', true, 'message', 'Checked out successfully at ' || _outlet.name);
-  ELSE
-    RETURN jsonb_build_object('success', false, 'error', 'Invalid action.');
-  END IF;
-END;
-$$;
+INSERT INTO public.user_roles (user_id, role)
+SELECT id, 'manager'::app_role
+FROM auth.users
+ON CONFLICT (user_id, role) DO NOTHING;
 
 
 -- 6. RLS & PERMISSIONS
@@ -298,42 +240,68 @@ ALTER TABLE public.payroll_adjustments ENABLE ROW LEVEL SECURITY;
 
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, service_role, anon;
 
--- Profiles & Roles Policies
+-- Drop existing policies to prevent conflicts on re-run
+DROP POLICY IF EXISTS "profiles_read_all" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_insert_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
+DROP POLICY IF EXISTS "user_roles_read_all" ON public.user_roles;
+DROP POLICY IF EXISTS "user_roles_insert_all" ON public.user_roles;
+DROP POLICY IF EXISTS "outlets_anon_select" ON public.outlets;
+DROP POLICY IF EXISTS "outlets_auth_select" ON public.outlets;
+DROP POLICY IF EXISTS "outlets_manager_write" ON public.outlets;
+DROP POLICY IF EXISTS "devices_select_all" ON public.kiosk_devices;
+DROP POLICY IF EXISTS "devices_write_all" ON public.kiosk_devices;
+DROP POLICY IF EXISTS "employees_select_all" ON public.employees;
+DROP POLICY IF EXISTS "employees_write_all" ON public.employees;
+DROP POLICY IF EXISTS "sessions_anon_all" ON public.attendance_sessions;
+DROP POLICY IF EXISTS "sessions_auth_select" ON public.attendance_sessions;
+DROP POLICY IF EXISTS "sessions_auth_write" ON public.attendance_sessions;
+DROP POLICY IF EXISTS "face_public_select" ON public.face_descriptors;
+DROP POLICY IF EXISTS "face_auth_write" ON public.face_descriptors;
+DROP POLICY IF EXISTS "face_anon_write" ON public.face_descriptors;
+DROP POLICY IF EXISTS "face_reset_select_all" ON public.face_reset_requests;
+DROP POLICY IF EXISTS "face_reset_insert_all" ON public.face_reset_requests;
+DROP POLICY IF EXISTS "face_reset_update_all" ON public.face_reset_requests;
+DROP POLICY IF EXISTS "settings_select_all" ON public.company_settings;
+DROP POLICY IF EXISTS "settings_write_all" ON public.company_settings;
+DROP POLICY IF EXISTS "depts_select_all" ON public.departments;
+DROP POLICY IF EXISTS "depts_write_all" ON public.departments;
+DROP POLICY IF EXISTS "desigs_select_all" ON public.designations;
+DROP POLICY IF EXISTS "desigs_write_all" ON public.designations;
+DROP POLICY IF EXISTS "announcements_read_all" ON public.announcements;
+DROP POLICY IF EXISTS "announcements_write_all" ON public.announcements;
+DROP POLICY IF EXISTS "payroll_adjustments_read_all" ON public.payroll_adjustments;
+DROP POLICY IF EXISTS "payroll_adjustments_write_all" ON public.payroll_adjustments;
+
+-- Re-create clean policies
 CREATE POLICY "profiles_read_all" ON public.profiles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "profiles_insert_own" ON public.profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
 CREATE POLICY "profiles_update_own" ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
 CREATE POLICY "user_roles_read_all" ON public.user_roles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "user_roles_insert_all" ON public.user_roles FOR INSERT TO authenticated WITH CHECK (true);
 
--- Outlets Policies
 CREATE POLICY "outlets_anon_select" ON public.outlets FOR SELECT TO anon USING (true);
 CREATE POLICY "outlets_auth_select" ON public.outlets FOR SELECT TO authenticated USING (true);
 CREATE POLICY "outlets_manager_write" ON public.outlets FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Kiosk Devices Policies
 CREATE POLICY "devices_select_all" ON public.kiosk_devices FOR SELECT USING (true);
 CREATE POLICY "devices_write_all" ON public.kiosk_devices FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Employees Policies
 CREATE POLICY "employees_select_all" ON public.employees FOR SELECT USING (true);
 CREATE POLICY "employees_write_all" ON public.employees FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Attendance Sessions Policies
 CREATE POLICY "sessions_anon_all" ON public.attendance_sessions FOR ALL TO anon USING (true) WITH CHECK(true);
 CREATE POLICY "sessions_auth_select" ON public.attendance_sessions FOR SELECT TO authenticated USING (true);
 CREATE POLICY "sessions_auth_write" ON public.attendance_sessions FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Face Descriptors Policies
 CREATE POLICY "face_public_select" ON public.face_descriptors FOR SELECT USING (true);
 CREATE POLICY "face_auth_write" ON public.face_descriptors FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "face_anon_write" ON public.face_descriptors FOR ALL TO anon USING (true) WITH CHECK (true);
 
--- Face Reset Requests Policies
 CREATE POLICY "face_reset_select_all" ON public.face_reset_requests FOR SELECT TO authenticated USING (true);
 CREATE POLICY "face_reset_insert_all" ON public.face_reset_requests FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "face_reset_update_all" ON public.face_reset_requests FOR UPDATE TO authenticated USING (true);
 
--- Settings & Master Data Policies
 CREATE POLICY "settings_select_all" ON public.company_settings FOR SELECT USING (true);
 CREATE POLICY "settings_write_all" ON public.company_settings FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "depts_select_all" ON public.departments FOR SELECT USING (true);
@@ -341,14 +309,12 @@ CREATE POLICY "depts_write_all" ON public.departments FOR ALL TO authenticated U
 CREATE POLICY "desigs_select_all" ON public.designations FOR SELECT USING (true);
 CREATE POLICY "desigs_write_all" ON public.designations FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Announcements & Payroll Adjustments
 CREATE POLICY "announcements_read_all" ON public.announcements FOR SELECT USING (true);
 CREATE POLICY "announcements_write_all" ON public.announcements FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "payroll_adjustments_read_all" ON public.payroll_adjustments FOR SELECT USING (true);
 CREATE POLICY "payroll_adjustments_write_all" ON public.payroll_adjustments FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-
--- 7. SEED INITIAL MASTER DATA
+-- 7. SEED DEFAULT MASTER DATA (NON-DESTRUCTIVE)
 
 INSERT INTO public.outlets (name, latitude, longitude, geofence_radius_meters, active) VALUES 
   ('Adyar Branch', 13.0012, 80.2565, 100, true),
@@ -369,11 +335,5 @@ INSERT INTO public.designations (name, absent_day_deduction, active, department)
   ('Supervisor', 0, true, 'Management'),
   ('Store Manager', 0, true, 'Management')
 ON CONFLICT (name) DO NOTHING;
-
-INSERT INTO public.employees (emp_code, full_name, email, role, department, monthly_salary, manager, status) VALUES 
-  ('EMP001', 'Arun Kumar', 'arun@example.com', 'Cleaner', 'Cleaning Staff', 15000, 'System Manager', 'Active'),
-  ('EMP002', 'Priya Sharma', 'priya@example.com', 'Washer', 'Cleaning Staff', 16000, 'System Manager', 'Active'),
-  ('EMP003', 'Rajesh Singh', 'rajesh@example.com', 'Supervisor', 'Management', 35000, 'System Manager', 'Active')
-ON CONFLICT (emp_code) DO NOTHING;
 
 -- END OF SCRIPT
