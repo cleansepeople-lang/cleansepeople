@@ -278,9 +278,8 @@ export async function downloadSalaryPdf(
     },
   });
 
-  const baseHours = row.payType === "hourly" ? row.regularHours : row.expectedDays;
-  const baseRate =
-    row.payType === "hourly" && row.regularHours ? row.base / row.regularHours : row.base;
+  const baseHours = row.regularHours;
+  const baseRate = row.regularHours ? row.base / row.regularHours : 0;
   const overtimeRate = row.overtimeHours ? row.overtime / row.overtimeHours : 0;
   const taxableTotal = row.base + row.overtime + row.bonus;
 

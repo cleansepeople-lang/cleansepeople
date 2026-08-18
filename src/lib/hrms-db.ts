@@ -537,6 +537,14 @@ function calculatePayrollRows(
   const workDates = eachDate(startDate, endDate).filter(isWorkday);
   const expectedDays = workDates.length;
 
+  const startMonthDate = new Date(`${startDate}T00:00:00`);
+  startMonthDate.setDate(1); // First day of the month
+  const endMonthDate = new Date(startMonthDate);
+  endMonthDate.setMonth(endMonthDate.getMonth() + 1);
+  endMonthDate.setDate(0); // Last day of the month
+  
+  const expectedDaysInMonth = eachDate(localDateKey(startMonthDate), localDateKey(endMonthDate)).filter(isWorkday).length;
+
   const attendanceByEmployee = new Map<string, AttendanceRow[]>();
 
   attendance.forEach((row) => {
@@ -579,8 +587,8 @@ function calculatePayrollRows(
 
         const absentDays = Math.max(0, expectedDays - workedDays);
         
-        // Dynamic daily/hourly rate based on exact working days in the month
-        const dailyRate = expectedDays > 0 ? (employee.monthlySalary / expectedDays) : 0;
+        // Dynamic daily/hourly rate based on exact working days in the entire month
+        const dailyRate = expectedDaysInMonth > 0 ? (employee.monthlySalary / expectedDaysInMonth) : 0;
         const hourlyRate = dailyRate / 10;
         
         const earnedBase = Math.round(regularHours * hourlyRate);
