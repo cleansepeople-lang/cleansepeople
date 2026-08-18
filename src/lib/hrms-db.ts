@@ -803,7 +803,7 @@ export async function updateEmployee(
 }
 
 export async function fetchDepartments() {
-  if (!supabase) return [] as Department[];
+  if (!supabase) return DEFAULT_DEPARTMENTS;
   const { data, error } = await supabase
     .from("departments")
     .select("id, name, active")
@@ -811,8 +811,14 @@ export async function fetchDepartments() {
     .order("name", { ascending: true });
 
   if (error) throw error;
-  return ((data ?? []) as DepartmentRow[]).map(mapDepartment);
+  const list = ((data ?? []) as DepartmentRow[]).map(mapDepartment);
+  return list.length > 0 ? list : DEFAULT_DEPARTMENTS;
 }
+
+const DEFAULT_DEPARTMENTS: Department[] = [
+  { id: "default-dept-1", name: "Cleaning Staff", active: true },
+  { id: "default-dept-2", name: "Management", active: true },
+];
 
 export async function saveDepartment(name: string) {
   if (!supabase) throw new Error("Supabase is not configured");
@@ -1057,7 +1063,7 @@ export async function fetchDesignationDeductions() {
 }
 
 export async function fetchDesignations() {
-  if (!supabase) return [] as Designation[];
+  if (!supabase) return DEFAULT_DESIGNATIONS;
   const { data, error } = await supabase
     .from("designations")
     .select("id, name, absent_day_deduction, active, department")
@@ -1065,8 +1071,17 @@ export async function fetchDesignations() {
     .order("name", { ascending: true });
 
   if (error) throw error;
-  return ((data ?? []) as DesignationRow[]).map(mapDesignation);
+  const list = ((data ?? []) as DesignationRow[]).map(mapDesignation);
+  return list.length > 0 ? list : DEFAULT_DESIGNATIONS;
 }
+
+const DEFAULT_DESIGNATIONS: Designation[] = [
+  { id: "default-desig-1", name: "Cleaner", absentDayDeduction: 0, active: true, department: "Cleaning Staff" },
+  { id: "default-desig-2", name: "Washer", absentDayDeduction: 0, active: true, department: "Cleaning Staff" },
+  { id: "default-desig-3", name: "Presser / Ironer", absentDayDeduction: 0, active: true, department: "Cleaning Staff" },
+  { id: "default-desig-4", name: "Supervisor", absentDayDeduction: 0, active: true, department: "Management" },
+  { id: "default-desig-5", name: "Store Manager", absentDayDeduction: 0, active: true, department: "Management" },
+];
 
 export async function saveDesignationDeduction(payload: {
   designation: string;

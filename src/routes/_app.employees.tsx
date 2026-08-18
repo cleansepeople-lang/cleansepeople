@@ -206,15 +206,14 @@ function EmployeesPage() {
     e.preventDefault();
     if (!isDbReady()) return toast.error("Connect Supabase before adding employees");
     if (!form.name.trim()) return toast.error("Name is required");
-    if (!form.department) return toast.error("Create a department in Settings first");
-
+    const selectedDepartment = form.department || departmentNames[0] || "Cleaning Staff";
     setSaving(true);
     try {
       const payload = {
         name: form.name,
         email: form.email,
         role: form.role || designationNames[0] || "Employee",
-        department: form.department,
+        department: selectedDepartment,
         monthlySalary: Number(form.salary) || 0,
         phone: form.phone,
         manager: "System Manager",
@@ -561,7 +560,7 @@ function EmployeesPage() {
                     <DialogFooter>
                       <Button
                         type="submit"
-                        disabled={saving || departments.length === 0 || designations.length === 0}
+                        disabled={saving}
                       >
                         {saving ? "Saving..." : editing ? "Update & Register Face →" : "Save & Register Face →"}
                       </Button>

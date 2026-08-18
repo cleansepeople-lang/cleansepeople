@@ -86,7 +86,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn: AuthCtx["signIn"] = async (email, password) => {
     console.log("signIn started with email:", email);
-    if (isSupabaseConfigured && supabase) {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error(
+        "Supabase is not configured. Please set valid VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.",
+      );
+    }
+    try {
       console.log("Calling supabase.auth.signInWithPassword...");
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       console.log("signInWithPassword completed:", { data, error });
@@ -100,25 +105,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(u);
       return u;
+    } catch (err: any) {
+      if (err?.message?.includes("fetch") || err?.name === "TypeError") {
+        throw new Error("Failed to fetch from Supabase. Please check your network connection and verify VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.");
+      }
+      throw err;
     }
-    throw new Error(
-      "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.",
-    );
   };
 
   const signUp: AuthCtx["signUp"] = async (email, password, name) => {
     const role: Role = "manager";
-    if (isSupabaseConfigured && supabase) {
-      // Block duplicate managers — only one manager account is allowed
-      const { data: existingManagers } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("role", "manager")
-        .limit(1);
-      if (existingManagers && existingManagers.length > 0) {
-        throw new Error("A manager account already exists. Please sign in instead.");
-      }
-
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error(
+        "Supabase is not configured. Please set valid VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.",
+      );
+    }
+    try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -137,10 +139,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const u: AuthUser = { id: data.user.id, email, name, role, initials: initials(name) };
       setUser(u);
       return u;
+    } catch (err: any) {
+      if (err?.message?.includes("fetch") || err?.name === "TypeError") {
+        throw new Error("Failed to fetch from Supabase. Please check your network connection and verify VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.");
+      }
+      throw err;
     }
-    throw new Error(
-      "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.",
-    );
   };
 
   const signOut: AuthCtx["signOut"] = async () => {
