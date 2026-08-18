@@ -36,20 +36,9 @@ async function fetchProfile(userId: string, fallbackEmail: string): Promise<Auth
     .from("user_roles")
     .select("role")
     .eq("user_id", userId);
-  let roles = (roleRows ?? []).map((r: any) => r.role as Role);
-  
-  // If user_roles entry is missing for this user, auto-assign manager role
-  if (roles.length === 0) {
-    try {
-      await supabase.from("user_roles").upsert({ user_id: userId, role: "manager" }, { onConflict: "user_id,role" });
-      roles = ["manager"];
-    } catch {
-      roles = ["manager"];
-    }
-  }
-
+  const roles = (roleRows ?? []).map((r: any) => r.role as Role);
   // Prioritise manager over employee if both exist
-  const role: Role = roles.includes("manager") ? "manager" : "manager";
+  const role: Role = roles.includes("manager") ? "manager" : (roles[0] ?? "employee");
   const name = profile?.full_name ?? fallbackEmail.split("@")[0];
   return {
     id: userId,
